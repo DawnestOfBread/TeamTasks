@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15
+    image: postgres:latest
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: teamtasks-passwd
@@ -32,10 +32,11 @@ services:
       context: .
       dockerfile: TeamTasks.Api/Dockerfile
     environment:
-      - ConnectionStrings__DefaultConnection=Host=db;Database=teamtasks_db;Username=admin;Password=safe-password
+      - ConnectionStrings__DefaultConnection=Host=db;Database=teamtasks_db;Username=admin;Password=teamtasks-passwd
       - Redis__ConnectionString=cache:6379
     ports:
-      - "5000:80"
+      - "5000:8080"
+      - "5001:8081"
     depends_on:
       - db
       - cache
