@@ -3,7 +3,7 @@ services:
     image: postgres:15
     environment:
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: safe-password
+      POSTGRES_PASSWORD: teamtasks-passwd
       POSTGRES_DB: teamtasks_db
     ports:
       - "5432:5432"
@@ -11,24 +11,40 @@ services:
     image: redis:alpine
     ports:
       - "6379:6379"
+
   queue:
     image: rabbitmq:3-management
     ports:
-      - "5672:5672"   # Communication
-      - "15672:15672" # Web UI
+      - "5672:5672"   # App logic
+      - "15672:15672" # Rabbit UI
 
   logs:
     image: datalust/seq:latest
     environment:
       ACCEPT_EULA: Y
+      SEQ_FIRSTRUN_ADMINPASSWORD: teamtasks-passwd
     ports:
-      - "8081:80"
+      - "8081:80"     # UI
+      - "5341:5341"   # API Log Ingestion
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: TeamTasks.Api/Dockerfile
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Database=teamtasks_db;Username=admin;Password=safe-password
+      - Redis__ConnectionString=cache:6379
     ports:
       - "5000:80"
     depends_on:
       - db
       - cache
+
+  worker:
+    build:
+      context: .
+      dockerfile: TeamTasks.Worker/Dockerfile
+    environment:
+      - RabbitMQ__Host=queue
+    depends_on:
       - queue
