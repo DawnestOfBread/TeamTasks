@@ -1,1 +1,10 @@
-<Solution />
+<Solution>
+  <Folder Name="/Solution Files/">
+    <File Path="docker-compose.yml" />
+  </Folder>
+  <Project Path="TeamTasks.Api/TeamTasks.Api.csproj" />
+  <Project Path="TeamTasks.Application/TeamTasks.Application.csproj" />
+  <Project Path="TeamTasks.Domain/TeamTasks.Domain.csproj" />
+  <Project Path="TeamTasks.Infrastructure/TeamTasks.Infrastructure.csproj" />
+  <Project Path="TeamTasks.Worker/TeamTasks.Worker.csproj" />
+</Solution>
