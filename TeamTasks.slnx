@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Solution Files/">
+    <File Path="Directory.Build.props" />
     <File Path="docker-compose.yml" />
   </Folder>
   <Project Path="TeamTasks.Api/TeamTasks.Api.csproj" />

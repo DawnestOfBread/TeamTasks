@@ -1,0 +1,14 @@
+<Project>
+    <PropertyGroup>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+        <NativeLibDirectory>$(MSBuildThisFileDirectory)native/</NativeLibDirectory>
+        <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)Intermediate\$(MSBuildProjectName)</BaseIntermediateOutputPath>
+        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
+        <MSBUildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBUildProjectExtensionsPath>
+
+        <BuildPath>$(MSBuildThisFileDirectory)Build</BuildPath>
+        <BaseOutputPath>$(BuildPath)\$(ConfigurationProfile)</BaseOutputPath>
+        <OutputPath>$(BaseOutputPath)</OutputPath>
+    </PropertyGroup>
+</Project>

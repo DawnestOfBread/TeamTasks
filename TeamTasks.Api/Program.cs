@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using TeamTasks.Infrastructure;
+
 namespace TeamTasks.Api;
 
 public class Program
@@ -11,8 +14,19 @@ public class Program
 
 		// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 		builder.Services.AddOpenApi();
-
+		
+		string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+		builder.Services.AddDbContext<AppDbContext>(options =>
+			options.UseNpgsql(connectionString));
+		
 		var app = builder.Build();
+		
+		// Apply database migrations
+		using (var scope = app.Services.CreateScope())
+		{
+			var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			dbContext.Database.Migrate(); 
+		}
 
 		// Configure the HTTP request pipeline.
 		if (app.Environment.IsDevelopment())
