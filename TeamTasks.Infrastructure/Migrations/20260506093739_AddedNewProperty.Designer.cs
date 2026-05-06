@@ -12,7 +12,7 @@ using TeamTasks.Infrastructure;
 namespace TeamTasks.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260506080033_AddedNewProperty")]
+    [Migration("20260506093739_AddedNewProperty")]
     partial class AddedNewProperty
     {
         /// <inheritdoc />
@@ -79,9 +79,8 @@ namespace TeamTasks.Infrastructure.Migrations
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Title")
                         .IsRequired()

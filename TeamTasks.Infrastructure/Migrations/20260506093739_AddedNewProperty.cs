@@ -69,7 +69,7 @@ namespace TeamTasks.Infrastructure.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Title = table.Column<string>(type: "text", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: false),
-                    Status = table.Column<string>(type: "text", nullable: false),
+                    Status = table.Column<int>(type: "integer", nullable: false),
                     ProjectId = table.Column<Guid>(type: "uuid", nullable: false),
                     AssignedUserId = table.Column<Guid>(type: "uuid", nullable: true),
                     OrganizationId = table.Column<Guid>(type: "uuid", nullable: false)
