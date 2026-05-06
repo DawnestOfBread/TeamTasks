@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Prometheus;
+using TeamTasks.Api.EndpointDefs;
 using TeamTasks.Infrastructure;
 
 namespace TeamTasks.Api;
@@ -35,8 +37,11 @@ public class Program
 		}
 
 		app.UseHttpsRedirection();
-
 		app.UseAuthorization();
+		
+		app.UseMiddleware<ExceptionMetricsMiddleware>();
+		app.UseHttpMetrics();
+		app.MapMetrics();
 
 		var summaries = new[]
 		{
