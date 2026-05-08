@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using TeamTasks.Application.Common;
 using TeamTasks.Domain;
 
 namespace TeamTasks.Infrastructure;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantProvider tenantProvider) : DbContext(options)
 {
 	public DbSet<Organization> Organizations { get; set; }
 	public DbSet<User> Users { get; set; }
@@ -13,6 +14,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		base.OnModelCreating(modelBuilder);
+		
+		// Filtering
+		modelBuilder.Entity<Project>()
+			.HasQueryFilter(p => p.OrganizationId == tenantProvider.OrganizationId);
+		modelBuilder.Entity<TaskItem>()
+			.HasQueryFilter(t => t.OrganizationId == tenantProvider.OrganizationId);
 		
 		// Indexing
 		modelBuilder.Entity<TaskItem>()

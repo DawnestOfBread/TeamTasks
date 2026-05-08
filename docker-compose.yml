@@ -34,6 +34,10 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Database=teamtasks_db;Username=admin;Password=teamtasks-passwd
       - Redis__ConnectionString=cache:6379
+      - Authentication__Google__ClientId=${GOOGLE_CLIENT_ID}
+      - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET}
+      - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET}
+      - Jwt__SecretKey=${JWT_SECRET}
     ports:
       - "5000:8080"
       - "5001:8081"

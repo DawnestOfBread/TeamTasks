@@ -5,3 +5,4 @@ Intermediate/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
+.env
