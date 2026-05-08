@@ -29,6 +29,7 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 			{
 				Id = Guid.NewGuid(),
 				Email = request.Email,
+				Name = request.Username,
 				PasswordHash = passwordService.HashPassword(request.Password),
 				OrganizationId = org.Id
 			};
