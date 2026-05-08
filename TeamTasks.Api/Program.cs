@@ -27,10 +27,10 @@ public class Program
 			options.AddPolicy("AllowAll",
 				policy =>
 				{
-					policy
-						.AllowAnyOrigin()
+					policy.SetIsOriginAllowed(_ => true)
+						.AllowAnyHeader()
 						.AllowAnyMethod()
-						.AllowAnyHeader();
+						.AllowCredentials();
 				});
 		});
 

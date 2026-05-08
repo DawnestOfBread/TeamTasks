@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TeamTasks.Application.Auth;
@@ -60,11 +61,24 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 		{
 			HttpOnly = true,
 			Secure = false, // This should be enabled in prod
-			SameSite = SameSiteMode.Strict,
+			SameSite = SameSiteMode.Lax,
 			Expires = DateTime.UtcNow.AddDays(7)
 		});
 
-		return Ok(new { Message = "Login successful" });
+		return Ok(new { 
+			email = user.Email,
+			orgId = user.OrganizationId
+		});
+	}
+	
+	[HttpGet("me")]
+	[Authorize]
+	public IActionResult GetCurrentUser() 
+	{
+		return Ok(new { 
+			email = User.FindFirstValue(ClaimTypes.Email),
+			orgId = User.FindFirstValue("OrganizationId")
+		});
 	}
 	
 	[HttpGet("login-google")]
