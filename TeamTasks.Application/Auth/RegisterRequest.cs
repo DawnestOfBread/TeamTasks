@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace TeamTasks.Application.Auth;
 
-public record RegisterRequest(string Email, string Password, string Username, string OrganizationName);
+public record RegisterRequest(string Email, string Password, [Length(4, 16)] string Username, [Length(4, 32)] string OrganizationName);
