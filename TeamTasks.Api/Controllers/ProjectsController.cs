@@ -34,7 +34,7 @@ public class ProjectsController(AppDbContext context) : ControllerBase
 		return Ok(project);
 	}
 	
-	[HttpPost]
+	[HttpPost("create")]
 	public async Task<IActionResult> Create([FromBody] CreateProjectRequest request, [FromServices] ITenantProvider tenantProvider)
 	{
 		await using var transaction = await context.Database.BeginTransactionAsync();
