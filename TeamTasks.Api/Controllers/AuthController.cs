@@ -33,7 +33,7 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 				Email = request.Email,
 				Name = request.Username,
 				PasswordHash = passwordHash,
-				OrganizationId = org.Id
+				OrganizationIds = [org.Id]
 			};
 			context.Users.Add(user);
 
@@ -43,8 +43,8 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 			CreateToken(user);
 
 			return Ok(new { 
-				email = user.Email,
-				orgId = user.OrganizationId
+				id = user.Id,
+				email = user.Email
 			});
 		}
 		catch (Exception)
@@ -64,14 +64,14 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 		CreateToken(user);
 
 		return Ok(new { 
-			email = user.Email,
-			orgId = user.OrganizationId
+			id = user.Id,
+			email = user.Email
 		});
 	}
 
 	private void CreateToken(User user)
 	{
-		string token = jwtService.GenerateToken(user.Id, user.OrganizationId, user.Email);
+		string token = jwtService.GenerateToken(user.Id, user.Email);
 
 		Response.Cookies.Append("X-Auth-Token", token, new CookieOptions
 		{

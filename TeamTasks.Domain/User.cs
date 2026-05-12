@@ -9,7 +9,7 @@ public class User
 	[Length(4, 16)] public string Name { get; set; }
 	public string Email { get; set; }
 	[JsonIgnore] public string PasswordHash { get; set; }
-	public Guid OrganizationId { get; set; }
+	public List<Guid> OrganizationIds { get; set; }
 	[JsonIgnore] public string? ExternalId { get; set; } // OAuth/OpenID
 	[JsonIgnore] public string? Provider { get; set; } // e.g. Google
 }

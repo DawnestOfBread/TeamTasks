@@ -9,7 +9,7 @@ namespace TeamTasks.Infrastructure.Security;
 
 public class JwtService(IConfiguration configuration) : IJwtService
 {
-	public string GenerateToken(Guid userId, Guid organizationId, string email)
+	public string GenerateToken(Guid userId, string email)
 	{
 		string secretKey = configuration["Jwt:SecretKey"] 
 		                   ?? throw new InvalidOperationException("JWT Secret Key is missing.");
@@ -21,7 +21,6 @@ public class JwtService(IConfiguration configuration) : IJwtService
 		{
 			{ JwtRegisteredClaimNames.Sub, userId },
 			{ JwtRegisteredClaimNames.Email, email },
-			{ "OrganizationId", organizationId },
 			{ JwtRegisteredClaimNames.Jti,  Guid.NewGuid() }
 		};
 
