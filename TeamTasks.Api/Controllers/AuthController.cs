@@ -25,21 +25,27 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 		{
 			var org = new Organization { Id = Guid.NewGuid(), Name = request.OrganizationName };
 			context.Organizations.Add(org);
-			
+
+			string passwordHash = passwordService.HashPassword(request.Password);
 			var user = new User 
 			{
 				Id = Guid.NewGuid(),
 				Email = request.Email,
 				Name = request.Username,
-				PasswordHash = passwordService.HashPassword(request.Password),
+				PasswordHash = passwordHash,
 				OrganizationId = org.Id
 			};
 			context.Users.Add(user);
 
 			await context.SaveChangesAsync();
 			await transaction.CommitAsync();
+			
+			CreateToken(user);
 
-			return Ok(new { Message = "User created successfully" });
+			return Ok(new { 
+				email = user.Email,
+				orgId = user.OrganizationId
+			});
 		}
 		catch (Exception)
 		{
@@ -55,8 +61,18 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 		if (user == null || !passwordService.VerifyPassword(request.Password, user.PasswordHash))
 			return Unauthorized("Invalid email or password.");
 		
+		CreateToken(user);
+
+		return Ok(new { 
+			email = user.Email,
+			orgId = user.OrganizationId
+		});
+	}
+
+	private void CreateToken(User user)
+	{
 		string token = jwtService.GenerateToken(user.Id, user.OrganizationId, user.Email);
-		
+
 		Response.Cookies.Append("X-Auth-Token", token, new CookieOptions
 		{
 			HttpOnly = true,
@@ -64,13 +80,8 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 			SameSite = SameSiteMode.Lax,
 			Expires = DateTime.UtcNow.AddDays(7)
 		});
-
-		return Ok(new { 
-			email = user.Email,
-			orgId = user.OrganizationId
-		});
 	}
-	
+
 	[HttpGet("me")]
 	[Authorize]
 	public IActionResult GetCurrentUser() 
