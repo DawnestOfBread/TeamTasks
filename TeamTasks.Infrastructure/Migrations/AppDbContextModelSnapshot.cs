@@ -149,13 +149,11 @@ namespace TeamTasks.Infrastructure.Migrations
 
             modelBuilder.Entity("TeamTasks.Domain.User", b =>
                 {
-                    b.HasOne("TeamTasks.Domain.Organization", "Organization")
+                    b.HasOne("TeamTasks.Domain.Organization", null)
                         .WithMany("Users")
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Organization");
                 });
 
             modelBuilder.Entity("TeamTasks.Domain.Organization", b =>
