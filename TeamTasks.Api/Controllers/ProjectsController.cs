@@ -39,7 +39,7 @@ public class ProjectsController(AppDbContext context) : ControllerBase
 	{
 		await using var transaction = await context.Database.BeginTransactionAsync();
 
-		try 
+		try
 		{
 			var newProject = new Project
 			{

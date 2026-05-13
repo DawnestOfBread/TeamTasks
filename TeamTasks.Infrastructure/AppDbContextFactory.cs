@@ -20,5 +20,6 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 
 internal class DesignTimeTenantProvider : ITenantProvider
 {
+	public Guid? UserId => Guid.Empty;
 	public Guid? OrganizationId => Guid.Empty;
 }

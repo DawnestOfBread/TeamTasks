@@ -23,24 +23,20 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 
 		try 
 		{
-			var org = new Organization { Id = Guid.NewGuid(), Name = request.OrganizationName };
-			context.Organizations.Add(org);
-
 			string passwordHash = passwordService.HashPassword(request.Password);
 			var user = new User 
 			{
 				Id = Guid.NewGuid(),
 				Email = request.Email,
 				Name = request.Username,
-				PasswordHash = passwordHash,
-				OrganizationIds = [org.Id]
+				PasswordHash = passwordHash
 			};
 			context.Users.Add(user);
 
 			await context.SaveChangesAsync();
 			await transaction.CommitAsync();
 			
-			CreateToken(user);
+			CreateToken(user, Guid.Empty);
 
 			return Ok(new { 
 				id = user.Id,
@@ -57,11 +53,14 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 	[HttpPost("login")]
 	public async Task<IActionResult> Login([FromBody] LoginRequest request)
 	{
-		var user = await context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+		var user = await context.Users.IgnoreQueryFilters().Include(user => user.Organizations).FirstOrDefaultAsync(u => u.Email == request.Email);
 		if (user == null || !passwordService.VerifyPassword(request.Password, user.PasswordHash))
 			return Unauthorized("Invalid email or password.");
-		
-		CreateToken(user);
+
+		var orgId = Guid.Empty;
+		if (user.Organizations.Count > 0)
+			orgId = user.Organizations.First().Id;
+		CreateToken(user, orgId);
 
 		return Ok(new { 
 			id = user.Id,
@@ -69,26 +68,14 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 		});
 	}
 
-	private void CreateToken(User user)
-	{
-		string token = jwtService.GenerateToken(user.Id, user.Email);
-
-		Response.Cookies.Append("X-Auth-Token", token, new CookieOptions
-		{
-			HttpOnly = true,
-			Secure = false, // This should be enabled in prod
-			SameSite = SameSiteMode.Lax,
-			Expires = DateTime.UtcNow.AddDays(7)
-		});
-	}
-
 	[HttpGet("me")]
 	[Authorize]
-	public IActionResult GetCurrentUser() 
+	public IActionResult GetCurrentUser([FromServices] ITenantProvider tenantProvider) 
 	{
 		return Ok(new { 
 			email = User.FindFirstValue(ClaimTypes.Email),
-			orgId = User.FindFirstValue("OrganizationId")
+			id = tenantProvider.UserId,
+			orgId = tenantProvider.OrganizationId
 		});
 	}
 	
@@ -97,5 +84,39 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 	{
 		var properties = new AuthenticationProperties { RedirectUri = "/" };
 		return Challenge(properties, "Google");
+	}
+	
+	[HttpPost("switch-org/{id}")]
+	[Authorize]
+	public async Task<IActionResult> SwitchOrg(Guid id)
+	{
+		var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+		
+		var user = await context.Users.IgnoreQueryFilters()
+			.FirstOrDefaultAsync(u => u.Id == userId && u.Organizations.Any(o => o.Id == id));
+
+		if (user == null) return Forbid();
+		
+		CreateToken(user, id);
+
+		return Ok();
+	}
+	
+	
+	private void CreateToken(User user, Guid orgId)
+	{
+		string token = jwtService.GenerateToken(user.Id, orgId, user.Email);
+
+		AppendCookie(token);
+	}
+	private void AppendCookie(string newToken)
+	{
+		Response.Cookies.Append("X-Auth-Token", newToken, new CookieOptions
+		{
+			HttpOnly = true,
+			Secure = false, // This should be enabled in prod
+			SameSite = SameSiteMode.Lax,
+			Expires = DateTime.UtcNow.AddDays(7)
+		});
 	}
 }
