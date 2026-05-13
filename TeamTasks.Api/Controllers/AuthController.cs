@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TeamTasks.Application.Auth;
 using TeamTasks.Application.Common;
+using TeamTasks.Application.DTOs;
 using TeamTasks.Domain;
 using TeamTasks.Infrastructure;
 using TeamTasks.Infrastructure.Security;
@@ -70,12 +71,18 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 
 	[HttpGet("me")]
 	[Authorize]
-	public IActionResult GetCurrentUser([FromServices] ITenantProvider tenantProvider) 
+	public async Task<IActionResult> GetCurrentUser([FromServices] ITenantProvider tenantProvider) 
 	{
+		var orgs = await context.Organizations
+			.IgnoreQueryFilters() 
+			.Where(o => o.Users.Any(u => u.Id == tenantProvider.UserId))
+			.Select(o => new OrganizationDto(o.Id, o.Name, null, null))
+			.ToListAsync();
 		return Ok(new { 
-			email = User.FindFirstValue(ClaimTypes.Email),
-			id = tenantProvider.UserId,
-			orgId = tenantProvider.OrganizationId
+			Id = tenantProvider.UserId,
+			Email = User.FindFirstValue(ClaimTypes.Email),
+			Organizations = orgs,
+			CurrentOrganizationId = tenantProvider.OrganizationId,
 		});
 	}
 	
