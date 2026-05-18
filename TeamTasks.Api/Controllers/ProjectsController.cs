@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TeamTasks.Application.Common;
+using TeamTasks.Application.DTOs;
 using TeamTasks.Application.UGC;
 using TeamTasks.Domain;
 using TeamTasks.Infrastructure;
@@ -24,11 +25,19 @@ public class ProjectsController(AppDbContext context) : ControllerBase
 	}
 	
 	[HttpGet("{id:guid}")]
-	public async Task<IActionResult> GetById(Guid id)
+	public async Task<IActionResult> GetById(Guid id, [FromServices] ITenantProvider tenantProvider)
 	{
-		var project = await context.Projects.FirstOrDefaultAsync(p => p.Id == id);
-
-		if (project == null) 
+		var project = await context.Projects
+			.AsSplitQuery()
+			.Where(p => p.Id == id) 
+			.Select(p => new ProjectDto(
+				p.Id, 
+				p.Name, 
+				p.Tasks.Select(t => new TaskDto(t.Id, t.Title, t.Description, t.AssignedUserId)).ToList()
+			))
+			.FirstOrDefaultAsync();
+		
+		if (project == null)
 			return NotFound("Project not found or you don't have access to it");
 
 		return Ok(project);
@@ -48,6 +57,7 @@ public class ProjectsController(AppDbContext context) : ControllerBase
 				OrganizationId = tenantProvider.OrganizationId ?? throw new UnauthorizedAccessException()
 			};
 			context.Projects.Add(newProject);
+			
 
 			await context.SaveChangesAsync();
 			await transaction.CommitAsync();

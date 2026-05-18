@@ -22,6 +22,7 @@ public class OrganizationsController(AppDbContext context, IJwtService jwtServic
 	{
 		var org = await context.Organizations
 			.AsSplitQuery()
+			.IgnoreQueryFilters()
 			.Where(o => o.Id == id)
 			.Select(o => new OrganizationDto(
 				o.Id,
@@ -69,6 +70,7 @@ public class OrganizationsController(AppDbContext context, IJwtService jwtServic
 			var user = await context.Users.FirstOrDefaultAsync(u => u.Id == tenantProvider.UserId);
 			if (user == null)
 				throw new UnauthorizedAccessException();
+			
 			var newOrg = new Organization
 			{
 				Id = Guid.NewGuid(),
@@ -76,6 +78,7 @@ public class OrganizationsController(AppDbContext context, IJwtService jwtServic
 				Users = [user]
 			};
 			context.Organizations.Add(newOrg);
+			user.Organizations.Add(newOrg);
 
 			await context.SaveChangesAsync();
 			await transaction.CommitAsync();

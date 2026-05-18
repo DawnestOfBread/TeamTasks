@@ -68,23 +68,6 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 			email = user.Email
 		});
 	}
-
-	[HttpGet("me")]
-	[Authorize]
-	public async Task<IActionResult> GetCurrentUser([FromServices] ITenantProvider tenantProvider) 
-	{
-		var orgs = await context.Organizations
-			.IgnoreQueryFilters() 
-			.Where(o => o.Users.Any(u => u.Id == tenantProvider.UserId))
-			.Select(o => new OrganizationDto(o.Id, o.Name, null, null))
-			.ToListAsync();
-		return Ok(new { 
-			Id = tenantProvider.UserId,
-			Email = User.FindFirstValue(ClaimTypes.Email),
-			Organizations = orgs,
-			CurrentOrganizationId = tenantProvider.OrganizationId,
-		});
-	}
 	
 	[HttpGet("login-google")]
 	public IActionResult LoginGoogle()

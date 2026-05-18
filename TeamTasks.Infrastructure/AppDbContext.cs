@@ -14,19 +14,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantProvide
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        var currentOrgId = tenantProvider.OrganizationId;
-        var currentUserId = tenantProvider.UserId;
         
-        modelBuilder.Entity<Organization>()
-            .HasQueryFilter(o => o.Users.Any(u => u.Id == currentUserId));
+        
         modelBuilder.Entity<Project>()
-            .HasQueryFilter(p => p.OrganizationId == currentOrgId);
+            .HasQueryFilter(p => p.OrganizationId == tenantProvider.OrganizationId);
+
         modelBuilder.Entity<TaskItem>()
-            .HasQueryFilter(t => t.OrganizationId == currentOrgId);
+            .HasQueryFilter(t => t.OrganizationId == tenantProvider.OrganizationId);
         
-        modelBuilder.Entity<User>()
-            .HasQueryFilter(u => !currentUserId.HasValue || u.Id == currentUserId || u.Organizations.Any(o => o.Id == currentOrgId));
         
         modelBuilder.Entity<User>()
             .HasMany(u => u.Organizations)
@@ -47,15 +42,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantProvide
             .HasForeignKey(t => t.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);
         
+        
         modelBuilder.Entity<Project>().HasIndex(p => p.OrganizationId);
         modelBuilder.Entity<TaskItem>().HasIndex(t => t.OrganizationId);
-        
+
         modelBuilder.Entity<TaskItem>().HasIndex(t => t.ProjectId);
-        
+        modelBuilder.Entity<TaskItem>().HasIndex(t => t.AssignedUserId);
+
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
-        
+
         modelBuilder.Entity<User>()
             .HasIndex(u => new { u.Provider, u.ExternalId })
             .HasFilter("\"ExternalId\" IS NOT NULL");
