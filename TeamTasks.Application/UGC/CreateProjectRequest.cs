@@ -1,3 +1,3 @@
 namespace TeamTasks.Application.UGC;
 
-public record CreateProjectRequest(Guid OrganizationId, string Name);
+public record CreateProjectRequest(string Name);
