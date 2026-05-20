@@ -33,7 +33,7 @@ public class ProjectsController(AppDbContext context) : ControllerBase
 			.Select(p => new ProjectDto(
 				p.Id, 
 				p.Name, 
-				p.Tasks.Select(t => new TaskDto(t.Id, t.Title, t.Description, t.AssignedUserId)).ToList()
+				p.Tasks.Select(t => new TaskDto(t.Id, t.Title, t.Description, t.Status, t.AssignedUserId)).ToList()
 			))
 			.FirstOrDefaultAsync();
 		
