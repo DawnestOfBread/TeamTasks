@@ -33,7 +33,7 @@ services:
       dockerfile: TeamTasks.Api/Dockerfile
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Database=teamtasks_db;Username=admin;Password=teamtasks-passwd
-      - Redis__ConnectionString=cache:6379
+      - ConnectionStrings__Redis=cache:6379
       - Authentication__Google__ClientId=${GOOGLE_CLIENT_ID}
       - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET}
       - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET}

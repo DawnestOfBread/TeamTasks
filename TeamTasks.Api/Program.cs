@@ -1,12 +1,17 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Prometheus;
+using StackExchange.Redis;
 using TeamTasks.Api.EndpointDefs;
 using TeamTasks.Api.Services;
+using TeamTasks.Application.Cache;
 using TeamTasks.Application.Common;
 using TeamTasks.Infrastructure;
+using TeamTasks.Infrastructure.Cache;
 using TeamTasks.Infrastructure.Security;
 
 namespace TeamTasks.Api;
@@ -42,8 +47,30 @@ public class Program
 		builder.Services.AddScoped<IJwtService, JwtService>();
 		builder.Services.AddScoped<ITenantProvider, TenantProvider>();
 		
+		builder.Services.AddCustomRateLimiting(builder.Configuration);
+		
+		builder.Services.AddStackExchangeRedisCache(options =>
+		{
+			options.Configuration = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+			options.InstanceName = "TeamTasks:";
+		});
+		
+		builder.Services.AddSingleton(new JsonSerializerOptions
+		{
+			ReferenceHandler = ReferenceHandler.Preserve,
+			WriteIndented = false
+		});
+		var dtoSerializerOptions = new JsonSerializerOptions
+		{
+			PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+			DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+		};
+		
+		builder.Services.AddSingleton(dtoSerializerOptions);
+		builder.Services.AddScoped<ICacheService, RedisCacheService>();
+		
 		string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-		builder.Services.AddDbContext<AppDbContext>(options =>
+		builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
 			options.UseNpgsql(connectionString));
 		
 		var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -98,6 +125,8 @@ public class Program
 		
 		app.MapControllers();
 
+		app.UseRateLimiter();
+
 		app.UseCors("AllowAll");
 		app.UseHttpsRedirection();
 		app.UseAuthorization();
@@ -105,29 +134,6 @@ public class Program
 		app.UseMiddleware<ExceptionMetricsMiddleware>();
 		app.UseHttpMetrics();
 		app.MapMetrics();
-
-		var summaries = new[]
-		{
-			"Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-		};
-
-		app.MapGet("/weatherforecast", (HttpContext httpContext) =>
-			{
-				var forecast = Enumerable.Range(1, 5).Select(index =>
-						new WeatherForecast
-						{
-							Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-							TemperatureC = Random.Shared.Next(-20, 55),
-							Summary = summaries[Random.Shared.Next(summaries.Length)]
-						})
-					.ToArray();
-				return forecast;
-			})
-			.WithName("GetWeatherForecast");
-		// app.MapPost("/auth/register", httpContext =>
-		// {
-		// 	httpContext.Request.Body.
-		// }).WithName("Register");
 
 		app.Run();
 	}

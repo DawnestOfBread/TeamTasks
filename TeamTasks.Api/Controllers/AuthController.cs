@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using TeamTasks.Application.Auth;
 using TeamTasks.Application.Common;
@@ -14,6 +15,7 @@ using RegisterRequest = TeamTasks.Application.Auth.RegisterRequest;
 namespace TeamTasks.Api.Controllers;
 
 [ApiController]
+[EnableRateLimiting("AuthPolicy")]
 [Route("api/[controller]")]
 public class AuthController(IPasswordService passwordService, IJwtService jwtService, AppDbContext context) : ControllerBase
 {

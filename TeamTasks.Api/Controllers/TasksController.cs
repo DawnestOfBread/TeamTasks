@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using TeamTasks.Application.Cache;
 using TeamTasks.Application.Common;
 using TeamTasks.Application.DTOs;
 using TeamTasks.Application.UGC;
@@ -12,134 +14,124 @@ namespace TeamTasks.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[EnableRateLimiting("TenantPolicy")]
 [Route("api/[controller]")]
-public class TasksController(AppDbContext context) : ControllerBase
+public class TasksController(AppDbContext context, ICacheService cache) : ControllerBase
 {
-	[HttpGet("{id:guid}")]
-	public async Task<IActionResult> GetById(Guid id, [FromServices] ITenantProvider tenantProvider)
-	{
-		var task = await context.Tasks
-			.AsSplitQuery()
-			.Where(t => t.Id == id) 
-			.Select(t => new TaskDto(
-				t.Id, 
-				t.Title, 
-				t.Description,
-				t.Status,
-				t.AssignedUserId
-			))
-			.FirstOrDefaultAsync();
-		
-		if (task == null)
-			return NotFound("Task not found or you don't have access to it");
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById(Guid id)
+    {
+        string cacheKey = $"task:{id}";
+        var taskDto = await cache.GetAsync<TaskDto>(cacheKey);
 
-		return Ok(task);
-	}
-	
-	[HttpPost("create/{projId:guid}")]
-	public async Task<IActionResult> Create(Guid projId, [FromBody] CreateTaskRequest request, [FromServices] ITenantProvider tenantProvider)
-	{
-		await using var transaction = await context.Database.BeginTransactionAsync();
+        if (taskDto == null)
+        {
+            taskDto = await context.Tasks
+                .AsSplitQuery()
+                .Where(t => t.Id == id) 
+                .Select(t => new TaskDto(t.Id, t.Title, t.Description, t.Status, t.AssignedUserId))
+                .FirstOrDefaultAsync();
+       
+            if (taskDto == null)
+                return NotFound("Task not found or access denied.");
 
-		try
-		{
-			var project = await context.Projects.FirstOrDefaultAsync(p => p.Id == projId);
-			if (project == null)
-				throw new UnauthorizedAccessException();
-			
-			var newTask = new TaskItem
-			{
-				Id = Guid.NewGuid(),
-				Title = request.Title,
-				Description = request.Description,
-				OrganizationId = tenantProvider.OrganizationId ?? throw new UnauthorizedAccessException(),
-				ProjectId = project.Id
-			};
-			context.Tasks.Add(newTask);
-			project.Tasks.Add(newTask);
-				
-			await context.SaveChangesAsync();
-			await transaction.CommitAsync();
+            await cache.SetAsync(cacheKey, taskDto, TimeSpan.FromMinutes(10));
+        }
 
-			return CreatedAtAction(nameof(GetById), new { id = newTask.Id }, newTask);
-		}
-		catch (Exception e)
-		{
-			await transaction.RollbackAsync();
-			return e switch
-			{
-				UnauthorizedAccessException => NotFound("Task not found or you don't have access to it"),
-				_ => BadRequest()
-			};
-		}
-	}
-	
-	[HttpPatch("{id:guid}")]
-	public async Task<IActionResult> UpdateTask(Guid id, [FromBody] UpdateTaskRequest request, [FromServices] ITenantProvider tenantProvider)
-	{
-		await using var transaction = await context.Database.BeginTransactionAsync();
+        return Ok(taskDto);
+    }
+    
+    [HttpPost("create/{projId:guid}")]
+    public async Task<IActionResult> Create(Guid projId, [FromBody] CreateTaskRequest request, [FromServices] ITenantProvider tenantProvider)
+    {
+        if (tenantProvider.OrganizationId == null) return Unauthorized();
 
-		try
-		{
-			var task = await context.Tasks.FirstOrDefaultAsync(t => t.Id == id);
-			if (task == null)
-				throw new UnauthorizedAccessException();
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        try
+        {
+            var project = await context.Projects.FirstOrDefaultAsync(p => p.Id == projId);
+            if (project == null) return NotFound("Project target missing.");
+          
+            var newTask = new TaskItem
+            {
+                Id = Guid.NewGuid(),
+                Title = request.Title,
+                Description = request.Description,
+                OrganizationId = tenantProvider.OrganizationId.Value,
+                ProjectId = project.Id,
+                Status = TaskStatus.Todo // Ensure initialized state assignment
+            };
 
-			if (request.Title != null)
-				task.Title = request.Title;
-			if (request.Description != null)
-				task.Description = request.Description;
-			if (request.Status != null)
-				task.Status = (TaskStatus)request.Status;
+            context.Tasks.Add(newTask);
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
+            // Purge downstream caches
+            await cache.RemoveAsync($"project:{project.Id}");
+            await cache.RemoveAsync($"org:{tenantProvider.OrganizationId}");
 
-			await context.SaveChangesAsync();
-			await transaction.CommitAsync();
+            return CreatedAtAction(nameof(GetById), new { id = newTask.Id }, newTask);
+        }
+        catch (Exception)
+        {
+            await transaction.RollbackAsync();
+            return BadRequest("Task tracking generation rejected.");
+        }
+    }
+    
+    [HttpPatch("{id:guid}")]
+    public async Task<IActionResult> UpdateTask(Guid id, [FromBody] UpdateTaskRequest request, [FromServices] ITenantProvider tenantProvider)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        try
+        {
+            var task = await context.Tasks.FirstOrDefaultAsync(t => t.Id == id);
+            if (task == null) return NotFound("Task context dropped.");
 
-			return Ok();
-		}
-		catch (Exception e)
-		{
-			await transaction.RollbackAsync();
-			return e switch
-			{
-				UnauthorizedAccessException => NotFound("Task not found or you don't have access to it"),
-				_ => BadRequest()
-			};
-		}
-	}
-	
-	[HttpDelete("{id:guid}")]
-	public async Task<IActionResult> DeleteTask(Guid id, [FromServices] ITenantProvider tenantProvider)
-	{
-		await using var transaction = await context.Database.BeginTransactionAsync();
+            if (request.Title != null) task.Title = request.Title;
+            if (request.Description != null) task.Description = request.Description;
+            if (request.Status != null) task.Status = (TaskStatus)request.Status;
+            if (request.AssignedUser != null && request.AssignedUser != Guid.Empty) task.AssignedUserId = request.AssignedUser;
 
-		try
-		{
-			var task = await context.Tasks.FirstOrDefaultAsync(t => t.Id == id);
-			if (task == null)
-				throw new UnauthorizedAccessException();
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
-			var project = await context.Projects.FirstOrDefaultAsync(p => p.Id == task.ProjectId);
-			if (project == null)
-				throw new UnauthorizedAccessException();
-			
-			context.Tasks.Remove(task);
-			project.Tasks.Remove(task);
-				
-			await context.SaveChangesAsync();
-			await transaction.CommitAsync();
+            await cache.RemoveAsync($"task:{id}");
+            await cache.RemoveAsync($"project:{task.ProjectId}");
+            await cache.RemoveAsync($"org:{tenantProvider.OrganizationId}");
 
-			return Ok();
-		}
-		catch (Exception e)
-		{
-			await transaction.RollbackAsync();
-			return e switch
-			{
-				UnauthorizedAccessException => NotFound("Task not found or you don't have access to it"),
-				_ => BadRequest()
-			};
-		}
-	}
+            return Ok(task);
+        }
+        catch (Exception)
+        {
+            await transaction.RollbackAsync();
+            return BadRequest("Patch mutation rejected.");
+        }
+    }
+    
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteTask(Guid id, [FromServices] ITenantProvider tenantProvider)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        try
+        {
+            var task = await context.Tasks.FirstOrDefaultAsync(t => t.Id == id);
+            if (task == null) return NotFound("Task not found.");
+          
+            context.Tasks.Remove(task);
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+          
+            await cache.RemoveAsync($"task:{id}");
+            await cache.RemoveAsync($"project:{task.ProjectId}");
+            await cache.RemoveAsync($"org:{tenantProvider.OrganizationId}");
+          
+            return Ok();
+        }
+        catch (Exception)
+        {
+            await transaction.RollbackAsync();
+            return BadRequest("Deletion processing rejected.");
+        }
+    }
 }
