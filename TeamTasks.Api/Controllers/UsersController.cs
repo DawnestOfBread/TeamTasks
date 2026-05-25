@@ -16,6 +16,9 @@ namespace TeamTasks.Api.Controllers;
 public class UsersController(AppDbContext context) : ControllerBase
 {
 	[HttpGet("me")]
+	[EndpointSummary("Gets the current user's data.")]
+	[EndpointDescription("Contains the user's email and organizations")]
+	[ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client, NoStore = false, VaryByHeader = "Cookie")]
 	public async Task<IActionResult> GetCurrentUser([FromServices] ITenantProvider tenantProvider) 
 	{
 		var orgs = await context.Organizations

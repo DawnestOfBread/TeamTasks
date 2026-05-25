@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using TeamTasks.Application.Cache;
 using TeamTasks.Application.Common;
+using TeamTasks.Application.Common.Events;
+using TeamTasks.Application.Common.Interfaces;
 using TeamTasks.Application.DTOs;
 using TeamTasks.Application.UGC;
 using TeamTasks.Domain;
@@ -16,9 +18,11 @@ namespace TeamTasks.Api.Controllers;
 [ApiController]
 [EnableRateLimiting("TenantPolicy")]
 [Route("api/[controller]")]
-public class TasksController(AppDbContext context, ICacheService cache) : ControllerBase
+public class TasksController(AppDbContext context, ICacheService cache, IEventBus eventBus) : ControllerBase
 {
     [HttpGet("{id:guid}")]
+    [EndpointSummary("Gets a task by ID")]
+    [EndpointDescription("Returns the task's data.")]
     public async Task<IActionResult> GetById(Guid id)
     {
         string cacheKey = $"task:{id}";
@@ -42,6 +46,8 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
     }
     
     [HttpPost("create/{projId:guid}")]
+    [EndpointSummary("Creates a new task")]
+    [EndpointDescription("Returns the task's data.")]
     public async Task<IActionResult> Create(Guid projId, [FromBody] CreateTaskRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         if (tenantProvider.OrganizationId == null) return Unauthorized();
@@ -59,7 +65,7 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
                 Description = request.Description,
                 OrganizationId = tenantProvider.OrganizationId.Value,
                 ProjectId = project.Id,
-                Status = TaskStatus.Todo // Ensure initialized state assignment
+                Status = TaskStatus.Todo
             };
 
             context.Tasks.Add(newTask);
@@ -69,6 +75,14 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
             // Purge downstream caches
             await cache.RemoveAsync($"project:{project.Id}");
             await cache.RemoveAsync($"org:{tenantProvider.OrganizationId}");
+            
+            await eventBus.PublishAsync(new TaskActivityEvent
+            {
+                Task = new TaskDto(newTask.Id, newTask.Title, newTask.Description, newTask.Status, newTask.AssignedUserId),
+                ProjectId = newTask.ProjectId,
+                OrganizationId = tenantProvider.OrganizationId!.Value,
+                ActivityType = "Create",
+            });
 
             return CreatedAtAction(nameof(GetById), new { id = newTask.Id }, newTask);
         }
@@ -80,6 +94,8 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
     }
     
     [HttpPatch("{id:guid}")]
+    [EndpointSummary("Updates a task by ID")]
+    [EndpointDescription("Returns the task's data.")]
     public async Task<IActionResult> UpdateTask(Guid id, [FromBody] UpdateTaskRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         await using var transaction = await context.Database.BeginTransactionAsync();
@@ -91,7 +107,7 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
             if (request.Title != null) task.Title = request.Title;
             if (request.Description != null) task.Description = request.Description;
             if (request.Status != null) task.Status = (TaskStatus)request.Status;
-            if (request.AssignedUser != null && request.AssignedUser != Guid.Empty) task.AssignedUserId = request.AssignedUser;
+            task.AssignedUserId = request.AssignedUser;
 
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -99,6 +115,14 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
             await cache.RemoveAsync($"task:{id}");
             await cache.RemoveAsync($"project:{task.ProjectId}");
             await cache.RemoveAsync($"org:{tenantProvider.OrganizationId}");
+            
+            await eventBus.PublishAsync(new TaskActivityEvent
+            {
+                Task = new TaskDto(task.Id, task.Title, task.Description, task.Status, task.AssignedUserId),
+                ProjectId = task.ProjectId,
+                OrganizationId = tenantProvider.OrganizationId!.Value,
+                ActivityType = "Update",
+            });
 
             return Ok(task);
         }
@@ -110,6 +134,7 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
     }
     
     [HttpDelete("{id:guid}")]
+    [EndpointSummary("Deletes a task by ID")]
     public async Task<IActionResult> DeleteTask(Guid id, [FromServices] ITenantProvider tenantProvider)
     {
         await using var transaction = await context.Database.BeginTransactionAsync();
@@ -117,8 +142,11 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
         {
             var task = await context.Tasks.FirstOrDefaultAsync(t => t.Id == id);
             if (task == null) return NotFound("Task not found.");
+            var proj = await context.Projects.FirstOrDefaultAsync(p => p.Tasks.Contains(task));
+            if (proj == null) return NotFound("Project not found.");
           
             context.Tasks.Remove(task);
+            proj.Tasks.Remove(task);
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
           
@@ -126,6 +154,14 @@ public class TasksController(AppDbContext context, ICacheService cache) : Contro
             await cache.RemoveAsync($"project:{task.ProjectId}");
             await cache.RemoveAsync($"org:{tenantProvider.OrganizationId}");
           
+            await eventBus.PublishAsync(new TaskActivityEvent
+            {
+                Task = new TaskDto(task.Id, task.Title, task.Description, task.Status, task.AssignedUserId),
+                ProjectId = task.ProjectId,
+                OrganizationId = tenantProvider.OrganizationId!.Value,
+                ActivityType = "Delete",
+            });
+            
             return Ok();
         }
         catch (Exception)
