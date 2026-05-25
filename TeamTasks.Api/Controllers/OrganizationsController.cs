@@ -20,6 +20,9 @@ namespace TeamTasks.Api.Controllers;
 public class OrganizationsController(AppDbContext context, ICacheService cache, IJwtService jwtService) : ControllerBase
 {
     [HttpGet("{id:guid}")]
+    [EndpointSummary("Gets an organization by ID")]
+    [EndpointDescription("Returns a shallow copy of the organization's data.")]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client, NoStore = false, VaryByHeader = "Cookie")]
     public async Task<IActionResult> GetById(Guid id)
     {
         string cacheKey = $"org:{id}";
@@ -53,6 +56,9 @@ public class OrganizationsController(AppDbContext context, ICacheService cache, 
     }
     
     [HttpGet]
+    [EndpointSummary("Gets the active user's organizations")]
+    [EndpointDescription("Returns a shallow copy of the organizations' data.")]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client, NoStore = false, VaryByHeader = "Cookie")]
     public async Task<IActionResult> GetAll([FromServices] ITenantProvider tenantProvider)
     {
         var orgs = await context.Organizations
@@ -71,6 +77,8 @@ public class OrganizationsController(AppDbContext context, ICacheService cache, 
     }
     
     [HttpPost("create")]
+    [EndpointSummary("Creates a new organization")]
+    [EndpointDescription("Returns the organization's data.")]
     public async Task<IActionResult> Create([FromBody] CreateOrganizationRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         await using var transaction = await context.Database.BeginTransactionAsync();
@@ -101,6 +109,8 @@ public class OrganizationsController(AppDbContext context, ICacheService cache, 
     }
     
     [HttpPost("invite")]
+    [EndpointSummary("Adds a user to the active organization")]
+    [EndpointDescription("Returns the user's data.")]
     public async Task<IActionResult> InviteUser([FromBody] InviteToOrganizationRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         if (tenantProvider.OrganizationId == null) return BadRequest("Active tenant organization context missing.");
