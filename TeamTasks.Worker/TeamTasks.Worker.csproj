@@ -1,22 +1,27 @@
-<Project Sdk="Microsoft.NET.Sdk.Worker">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <UserSecretsId>dotnet-TeamTasks.Worker-e3bdbc10-027c-4c6e-97fc-c6f8640ee2cf</UserSecretsId>
+        <UserSecretsId>71a83dae-2d68-4354-aaf0-8013e9c31510</UserSecretsId>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
         <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.7" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5"/>
-        <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
     </ItemGroup>
 
     <ItemGroup>
       <Content Include="..\.dockerignore">
         <Link>.dockerignore</Link>
       </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\TeamTasks.Application\TeamTasks.Application.csproj" />
     </ItemGroup>
 </Project>

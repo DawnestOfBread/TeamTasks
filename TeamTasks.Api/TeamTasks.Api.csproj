@@ -5,10 +5,13 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-      <UserSecretsId>71a83dae-2d68-4354-aaf0-8013e9c31510</UserSecretsId>
+        <UserSecretsId>71a83dae-2d68-4354-aaf0-8013e9c31510</UserSecretsId>
+
+        <DisableMicrosoftAspNetCoreOpenApiSourceGenerator>true</DisableMicrosoftAspNetCoreOpenApiSourceGenerator>
   </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.8" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.7" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
@@ -16,14 +19,15 @@
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
+        <PackageReference Include="Microsoft.OpenApi" Version="2.7.4" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
         <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.15.3-beta.1" />
         <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
         <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
         <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.14.14" />
         <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
         <PackageReference Include="Serilog.Sinks.Seq" Version="9.0.0" />
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
     </ItemGroup>
 
     <ItemGroup>
