@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -17,9 +19,11 @@ namespace TeamTasks.Api.Controllers;
 [ApiController]
 [EnableRateLimiting("AuthPolicy")]
 [Route("api/[controller]")]
-public class AuthController(IPasswordService passwordService, IJwtService jwtService, AppDbContext context) : ControllerBase
+public class AuthController(IPasswordService passwordService, IJwtService jwtService, AppDbContext context, IConfiguration configuration) : ControllerBase
 {
 	[HttpPost("register")]
+	[EndpointSummary("Creates and logs in a user")]
+	[EndpointDescription("Creates an account and appends a HttpOnly session JWT cookie.")]
 	public async Task<IActionResult> Register([FromBody] RegisterRequest request)
 	{
 		await using var transaction = await context.Database.BeginTransactionAsync();
@@ -54,6 +58,8 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 	}
 	
 	[HttpPost("login")]
+	[EndpointSummary("Authenticates a user")]
+	[EndpointDescription("Verifies credentials and appends a HttpOnly session JWT cookie.")]
 	public async Task<IActionResult> Login([FromBody] LoginRequest request)
 	{
 		var user = await context.Users.IgnoreQueryFilters().Include(user => user.Organizations).FirstOrDefaultAsync(u => u.Email == request.Email);
@@ -72,14 +78,90 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
 	}
 	
 	[HttpGet("login-google")]
+	[EndpointSummary("Authenticates a user through Google")]
+	[EndpointDescription("Redirects the user to a Google login page.")]
 	public IActionResult LoginGoogle()
 	{
-		var properties = new AuthenticationProperties { RedirectUri = "/" };
-		return Challenge(properties, "Google");
+		var properties = new AuthenticationProperties 
+		{ 
+			RedirectUri = "/api/auth/google-callback"
+		};
+		return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+	}
+	
+	[HttpGet("google-callback")]
+	[EndpointSummary("Authenticates a user through Google")]
+	[EndpointDescription("Appends a HttpOnly session JWT cookie and redirects the user back.")]
+	public async Task<IActionResult> GoogleCallback()
+	{
+		string frontendUrl = configuration["Frontend:BaseUrl"] ?? "/";
+		
+	    var result = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+	    if (!result.Succeeded || result.Principal == null)
+	        return Redirect(frontendUrl + "login?error=google_auth_failed");
+	    
+	    string? email = result.Principal.FindFirstValue(ClaimTypes.Email);
+	    string name = result.Principal.FindFirstValue(ClaimTypes.Name) ?? "Google User";
+
+	    if (string.IsNullOrEmpty(email))
+	        return Redirect(frontendUrl + "login?error=invalid_email");
+
+	    var targetOrgId = Guid.Empty;
+
+	    try
+	    {
+	        var user = await context.Users
+		        .IgnoreQueryFilters()
+		        .Include(u => u.Organizations)
+		        .FirstOrDefaultAsync(u => u.Email == email);
+
+	        if (user == null)
+	        {
+	            await using var transaction = await context.Database.BeginTransactionAsync();
+	            try
+	            {
+	                user = new User
+	                {
+	                    Id = Guid.NewGuid(),
+	                    Email = email,
+	                    Name = name,
+	                    Provider = "Google",
+	                    PasswordHash = string.Empty
+	                };
+	                
+	                context.Users.Add(user);
+	                await context.SaveChangesAsync();
+	                await transaction.CommitAsync();
+	            }
+	            catch (Exception)
+	            {
+	                if (context.Database.CurrentTransaction != null) 
+		                await transaction.RollbackAsync();
+	                throw;
+	            }
+	        }
+	        else
+		        targetOrgId = user.Organizations.FirstOrDefault()?.Id ?? Guid.Empty;
+
+	        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+	        CreateToken(user, targetOrgId);
+	        
+	        return Redirect(frontendUrl);
+	    }
+	    catch (Exception ex)
+	    {
+	        Console.WriteLine($"[Google OAuth Error Details]: {ex.Message}");
+	        if (ex.InnerException != null) 
+		        Console.WriteLine($"[Inner Exception]: {ex.InnerException.Message}");
+
+	        return Redirect(frontendUrl + "login?error=registration_processing_failed");
+	    }
 	}
 	
 	[HttpPost("switch-org/{id}")]
 	[Authorize]
+	[EndpointSummary("Switches the user's active organization")]
+	[EndpointDescription("Updates the cookie to change its active organization.")]
 	public async Task<IActionResult> SwitchOrg(Guid id)
 	{
 		var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
