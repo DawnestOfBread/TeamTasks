@@ -35,6 +35,7 @@ services:
       - ConnectionStrings__DefaultConnection=Host=db;Database=teamtasks_db;Username=admin;Password=teamtasks-passwd
       - ConnectionStrings__Redis=cache:6379
       - ConnectionStrings__RabbitMQ=queue
+      - ConnectionStrings__Seq=logs:5341
       - Authentication__Google__ClientId=${GOOGLE_CLIENT_ID}
       - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET}
       - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET}
@@ -54,7 +55,7 @@ services:
       - "5002:8080"
     environment:
       - ConnectionStrings__RabbitMQ=queue
-      - Frontend__BaseUrl=http://localhost:3000
       - Jwt__SecretKey=${JWT_SECRET}
+      - ConnectionStrings__Seq=logs:5341
     depends_on:
       - queue

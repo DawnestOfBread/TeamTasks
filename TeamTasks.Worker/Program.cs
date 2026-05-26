@@ -18,10 +18,11 @@ public class Program
 
 		builder.Services.AddCors(options =>
 		{
-			options.AddPolicy("AllowAll",
+			string frontendUrl = builder.Configuration["Frontend:BaseUrl"] ?? "/";
+			options.AddPolicy("Frontend",
 				policy =>
 				{
-					policy.SetIsOriginAllowed(_ => true)
+					policy.SetIsOriginAllowed(uri => uri == frontendUrl)
 						.AllowAnyHeader()
 						.AllowAnyMethod()
 						.AllowCredentials();
@@ -85,7 +86,7 @@ public class Program
 
 		var app = builder.Build();
 
-		app.UseCors("AllowAll");
+		app.UseCors("Frontend");
 
 		app.UseAuthentication();
 		app.UseAuthorization();

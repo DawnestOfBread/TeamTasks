@@ -90,13 +90,13 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
        
         var result = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
         if (!result.Succeeded || result.Principal == null)
-            return Redirect(frontendUrl + "login?error=google_auth_failed");
+            return Redirect(frontendUrl + "/login?error=google_auth_failed");
         
         string? email = result.Principal.FindFirstValue(ClaimTypes.Email);
         string name = result.Principal.FindFirstValue(ClaimTypes.Name) ?? "Google User";
 
         if (string.IsNullOrEmpty(email))
-            return Redirect(frontendUrl + "login?error=invalid_email");
+            return Redirect(frontendUrl + "/login?error=invalid_email");
 
         var targetOrgId = Guid.Empty;
         try
@@ -143,7 +143,7 @@ public class AuthController(IPasswordService passwordService, IJwtService jwtSer
         }
         catch (Exception)
         {
-            return Redirect(frontendUrl + "login?error=registration_processing_failed");
+            return Redirect(frontendUrl + "/login?error=registration_processing_failed");
         }
     }
     

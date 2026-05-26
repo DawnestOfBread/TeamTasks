@@ -12,6 +12,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Prometheus;
 using Scalar.AspNetCore;
+using Serilog;
 using StackExchange.Redis;
 using TeamTasks.Api.EndpointDefs;
 using TeamTasks.Api.Services;
@@ -30,6 +31,14 @@ public class Program
     public static void Main(string[] args)
     {
        var builder = WebApplication.CreateBuilder(args);
+       
+       Log.Logger = new LoggerConfiguration()
+          .ReadFrom.Configuration(builder.Configuration)
+          .Enrich.FromLogContext()
+          .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+          .WriteTo.Seq(builder.Configuration.GetConnectionString("Seq") ?? "http://seq:5341")
+          .CreateLogger();
+       builder.Host.UseSerilog();
 
        // Add services to the container.
        builder.Services.AddAuthorization();
@@ -37,10 +46,11 @@ public class Program
        
        builder.Services.AddCors(options =>
        {
-          options.AddPolicy("AllowAll",
+          string frontendUrl = builder.Configuration["Frontend:BaseUrl"] ?? "/";
+          options.AddPolicy("Frontend",
              policy =>
              {
-                policy.SetIsOriginAllowed(_ => true)
+                policy.SetIsOriginAllowed(uri => uri == frontendUrl)
                    .AllowAnyHeader()
                    .AllowAnyMethod()
                    .AllowCredentials();
@@ -182,37 +192,49 @@ public class Program
 
        builder.Services.AddScoped<IEventBus, EventBus>();
        
-       var app = builder.Build();
-       
-       using (var scope = app.Services.CreateScope())
+       try
        {
-          var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-          dbContext.Database.Migrate(); 
-       }
-       
-       
-       app.MapOpenApi();
-       app.MapScalarApiReference(options =>
-       {
-          options.WithTitle("TeamTasks API Console")
-             .WithTheme(ScalarTheme.DeepSpace)
-             .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
-       });
-       
-       
-       app.UseForwardedHeaders();
-       app.UseHttpsRedirection();
-       app.UseRouting();
-       app.UseCors("AllowAll");
-       app.UseResponseCaching();
-       app.UseRateLimiter();
-       app.UseAuthentication();
-       app.UseAuthorization();
-       app.UseMiddleware<ExceptionMetricsMiddleware>();
-       app.UseHttpMetrics();
-       app.MapControllers();
-       app.MapMetrics();
+          Log.Information("Starting TeamTasks...");
+          var app = builder.Build();
+          app.UseSerilogRequestLogging();
+          
+          using (var scope = app.Services.CreateScope())
+          {
+             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+             dbContext.Database.Migrate(); 
+          }
+          
+          app.MapOpenApi();
+          app.MapScalarApiReference(options =>
+          {
+             options.WithTitle("TeamTasks API Console")
+                .WithTheme(ScalarTheme.DeepSpace)
+                .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+          });
+          
+          
+          app.UseForwardedHeaders();
+          app.UseHttpsRedirection();
+          app.UseRouting();
+          app.UseCors("Frontend");
+          app.UseResponseCaching();
+          app.UseRateLimiter();
+          app.UseAuthentication();
+          app.UseAuthorization();
+          app.UseMiddleware<ExceptionMetricsMiddleware>();
+          app.UseHttpMetrics();
+          app.MapControllers();
+          app.MapMetrics();
 
-       app.Run();
+          app.Run();
+       }
+       catch (Exception ex)
+       {
+          Log.Fatal(ex, "Host terminated unexpectedly");
+       }
+       finally
+       {
+          Log.CloseAndFlush();
+       }
     }
 }
