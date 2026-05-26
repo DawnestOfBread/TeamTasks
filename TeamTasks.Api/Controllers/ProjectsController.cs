@@ -18,9 +18,6 @@ namespace TeamTasks.Api.Controllers;
 public class ProjectsController(AppDbContext context, ICacheService cache) : ControllerBase
 {
     [HttpGet]
-    [EndpointSummary("Gets the current organization's projects")]
-    [EndpointDescription("Returns a list of projects.")]
-    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client, NoStore = false, VaryByHeader = "Cookie")]
     public async Task<IActionResult> List()
     {
         var projects = await context.Projects.Include(p => p.Tasks).ToListAsync();
@@ -28,21 +25,20 @@ public class ProjectsController(AppDbContext context, ICacheService cache) : Con
     }
     
     [HttpGet("{id:guid}")]
-    [EndpointSummary("Gets a project by ID")]
-    [EndpointDescription("Returns a shallow copy of the project's data.")]
+    [ResponseCache(Duration = 30, Location = ResponseCacheLocation.Client, VaryByHeader = "Cookie")]
     public async Task<IActionResult> GetById(Guid id)
     {
         var cacheKey = $"project:{id}";
         var projectDto = await cache.GetAsync<ProjectDto>(cacheKey);
-
         if (projectDto != null) return Ok(projectDto);
+
         projectDto = await context.Projects
             .AsSplitQuery()
             .Where(p => p.Id == id) 
             .Select(p => new ProjectDto(
                 p.Id, 
                 p.Name, 
-                p.Tasks.Select(t => new TaskDto(t.Id, t.Title, t.Description, t.Status, t.AssignedUserId)).ToList()
+                p.Tasks.Select(t => new TaskDto(t.Id, t.Title, t.Description, t.Status, t.AssignedUserId))
             ))
             .FirstOrDefaultAsync();
        
@@ -50,13 +46,10 @@ public class ProjectsController(AppDbContext context, ICacheService cache) : Con
             return NotFound("Project not found or access denied.");
 
         await cache.SetAsync(cacheKey, projectDto, TimeSpan.FromMinutes(10));
-
         return Ok(projectDto);
     }
     
     [HttpPost("create")]
-    [EndpointSummary("Creates a new project")]
-    [EndpointDescription("Returns the project's data.")]
     public async Task<IActionResult> Create([FromBody] CreateProjectRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         if (tenantProvider.OrganizationId == null) return BadRequest("Active tenant missing.");
@@ -64,14 +57,11 @@ public class ProjectsController(AppDbContext context, ICacheService cache) : Con
         await using var transaction = await context.Database.BeginTransactionAsync();
         try
         {
-            var organization = await context.Organizations.FirstOrDefaultAsync(o => o.Id == tenantProvider.OrganizationId);
-            if (organization == null) return Unauthorized();
-          
             var newProject = new Project
             {
                 Id = Guid.NewGuid(),
                 Name = request.Name,
-                OrganizationId = organization.Id
+                OrganizationId = tenantProvider.OrganizationId.Value
             };
 
             context.Projects.Add(newProject);
@@ -79,7 +69,6 @@ public class ProjectsController(AppDbContext context, ICacheService cache) : Con
             await transaction.CommitAsync();
 
             await cache.RemoveAsync($"org:{tenantProvider.OrganizationId}");
-
             return CreatedAtAction(nameof(GetById), new { id = newProject.Id }, newProject);
         }
         catch (Exception)

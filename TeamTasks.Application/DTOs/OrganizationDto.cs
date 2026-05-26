@@ -1,3 +1,3 @@
 namespace TeamTasks.Application.DTOs;
 
-public record OrganizationDto(Guid Id, string Name, List<UserDto>? Users, List<ProjectDto>? Projects);
+public record OrganizationDto(Guid Id, string Name, IEnumerable<UserDto>? Users, IEnumerable<ProjectDto>? Projects);

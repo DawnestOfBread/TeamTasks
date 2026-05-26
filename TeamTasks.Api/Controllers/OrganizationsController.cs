@@ -15,61 +15,53 @@ namespace TeamTasks.Api.Controllers;
 [Authorize]
 [ApiController]
 [EnableRateLimiting("TenantPolicy")]
-[EnableCors]
 [Route("api/[controller]")]
 public class OrganizationsController(AppDbContext context, ICacheService cache, IJwtService jwtService) : ControllerBase
 {
     [HttpGet("{id:guid}")]
     [EndpointSummary("Gets an organization by ID")]
-    [EndpointDescription("Returns a shallow copy of the organization's data.")]
-    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client, NoStore = false, VaryByHeader = "Cookie")]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client, VaryByHeader = "Cookie")]
     public async Task<IActionResult> GetById(Guid id)
     {
-        string cacheKey = $"org:{id}";
+        var cacheKey = $"org:{id}";
+        
         var orgDto = await cache.GetAsync<OrganizationDto>(cacheKey);
-
-        if (orgDto == null)
-        {
-            orgDto = await context.Organizations
-                .AsSplitQuery()
-                .IgnoreQueryFilters()
-                .Where(o => o.Id == id)
-                .Select(o => new OrganizationDto(
-                    o.Id,
-                    o.Name,
-                    o.Users.Select(u => new UserDto(u.Id, u.Name)).ToList(),
-                    o.Projects.Select(p => new ProjectDto(
-                        p.Id,
-                        p.Name,
-                        p.Tasks.Select(t => new TaskDto(t.Id, t.Title, t.Description, t.Status, t.AssignedUserId)).ToList()
-                    )).ToList()
+        if (orgDto != null) return Ok(orgDto);
+        
+        orgDto = await context.Organizations
+            .AsSplitQuery()
+            .Where(o => o.Id == id)
+            .Select(o => new OrganizationDto(
+                o.Id,
+                o.Name,
+                o.Users.Select(u => new UserDto(u.Id, u.Name)), 
+                o.Projects.Select(p => new ProjectDto(
+                    p.Id,
+                    p.Name,
+                    p.Tasks.Select(t => new TaskDto(t.Id, t.Title, t.Description, t.Status, t.AssignedUserId))
                 ))
-                .FirstOrDefaultAsync();
+            ))
+            .FirstOrDefaultAsync();
 
-            if (orgDto == null) 
-                return NotFound("Organization not found or access denied.");
+        if (orgDto == null) 
+            return NotFound("Organization not found or access denied.");
 
-            await cache.SetAsync(cacheKey, orgDto, TimeSpan.FromMinutes(10));
-        }
-
+        await cache.SetAsync(cacheKey, orgDto, TimeSpan.FromMinutes(10));
         return Ok(orgDto);
     }
     
     [HttpGet]
-    [EndpointSummary("Gets the active user's organizations")]
-    [EndpointDescription("Returns a shallow copy of the organizations' data.")]
-    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client, NoStore = false, VaryByHeader = "Cookie")]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client, VaryByHeader = "Cookie")]
     public async Task<IActionResult> GetAll([FromServices] ITenantProvider tenantProvider)
     {
         var orgs = await context.Organizations
-            .IgnoreQueryFilters() 
             .AsSplitQuery()
             .Where(o => o.Users.Any(u => u.Id == tenantProvider.UserId))
             .Select(o => new OrganizationDto(
                 o.Id,
                 o.Name,
-                o.Users.Select(u => new UserDto(u.Id, u.Name)).ToList(),
-                o.Projects.Select(p => new ProjectDto(p.Id, p.Name, new List<TaskDto>())).ToList()
+                o.Users.Select(u => new UserDto(u.Id, u.Name)),
+                o.Projects.Select(p => new ProjectDto(p.Id, p.Name, Array.Empty<TaskDto>()))
             ))
             .ToListAsync();
 
@@ -77,14 +69,12 @@ public class OrganizationsController(AppDbContext context, ICacheService cache, 
     }
     
     [HttpPost("create")]
-    [EndpointSummary("Creates a new organization")]
-    [EndpointDescription("Returns the organization's data.")]
     public async Task<IActionResult> Create([FromBody] CreateOrganizationRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         await using var transaction = await context.Database.BeginTransactionAsync();
         try 
         {
-            var user = await context.Users.FirstOrDefaultAsync(u => u.Id == tenantProvider.UserId);
+            var user = await context.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == tenantProvider.UserId);
             if (user == null) return Unauthorized();
           
             var newOrg = new Organization
@@ -98,7 +88,15 @@ public class OrganizationsController(AppDbContext context, ICacheService cache, 
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
           
-            CreateToken(user, newOrg.Id);
+            string token = jwtService.GenerateToken(user.Id, newOrg.Id, user.Email);
+            Response.Cookies.Append("X-Auth-Token", token, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Lax,
+                Expires = DateTime.UtcNow.AddDays(7)
+            });
+
             return Ok(new { id = newOrg.Id });
         }
         catch (Exception)
@@ -109,8 +107,6 @@ public class OrganizationsController(AppDbContext context, ICacheService cache, 
     }
     
     [HttpPost("invite")]
-    [EndpointSummary("Adds a user to the active organization")]
-    [EndpointDescription("Returns the user's data.")]
     public async Task<IActionResult> InviteUser([FromBody] InviteToOrganizationRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         if (tenantProvider.OrganizationId == null) return BadRequest("Active tenant organization context missing.");
@@ -129,7 +125,7 @@ public class OrganizationsController(AppDbContext context, ICacheService cache, 
                 .FirstOrDefaultAsync(u => u.Email == request.Email);
 
             if (user == null || organization.Users.Any(u => u.Id == user.Id))
-                return BadRequest("User not found or already a member of this organization.");
+                return BadRequest("User not found or already a member.");
           
             organization.Users.Add(user);
             await context.SaveChangesAsync();
@@ -143,17 +139,5 @@ public class OrganizationsController(AppDbContext context, ICacheService cache, 
             await transaction.RollbackAsync();
             return BadRequest("Invitation processing error.");
         }
-    }
-    
-    private void CreateToken(User user, Guid orgId)
-    {
-        string token = jwtService.GenerateToken(user.Id, orgId, user.Email);
-        Response.Cookies.Append("X-Auth-Token", token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Lax,
-            Expires = DateTime.UtcNow.AddDays(7)
-        });
     }
 }
