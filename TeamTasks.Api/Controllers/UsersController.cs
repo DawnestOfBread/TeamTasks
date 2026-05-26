@@ -16,13 +16,10 @@ namespace TeamTasks.Api.Controllers;
 public class UsersController(AppDbContext context) : ControllerBase
 {
 	[HttpGet("me")]
-	[EndpointSummary("Gets the current user's data.")]
-	[EndpointDescription("Contains the user's email and organizations")]
-	[ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client, NoStore = false, VaryByHeader = "Cookie")]
+	[ResponseCache(Duration = 30, Location = ResponseCacheLocation.Client, VaryByHeader = "Cookie")]
 	public async Task<IActionResult> GetCurrentUser([FromServices] ITenantProvider tenantProvider) 
 	{
 		var orgs = await context.Organizations
-			.IgnoreQueryFilters() 
 			.Where(o => o.Users.Any(u => u.Id == tenantProvider.UserId))
 			.Select(o => new OrganizationDto(o.Id, o.Name, null, null))
 			.ToListAsync();

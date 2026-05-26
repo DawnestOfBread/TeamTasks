@@ -21,33 +21,25 @@ namespace TeamTasks.Api.Controllers;
 public class TasksController(AppDbContext context, ICacheService cache, IEventBus eventBus) : ControllerBase
 {
     [HttpGet("{id:guid}")]
-    [EndpointSummary("Gets a task by ID")]
-    [EndpointDescription("Returns the task's data.")]
     public async Task<IActionResult> GetById(Guid id)
     {
         string cacheKey = $"task:{id}";
         var taskDto = await cache.GetAsync<TaskDto>(cacheKey);
+        if (taskDto != null) return Ok(taskDto);
 
+        taskDto = await context.Tasks
+            .Where(t => t.Id == id) 
+            .Select(t => new TaskDto(t.Id, t.Title, t.Description, t.Status, t.AssignedUserId))
+            .FirstOrDefaultAsync();
+   
         if (taskDto == null)
-        {
-            taskDto = await context.Tasks
-                .AsSplitQuery()
-                .Where(t => t.Id == id) 
-                .Select(t => new TaskDto(t.Id, t.Title, t.Description, t.Status, t.AssignedUserId))
-                .FirstOrDefaultAsync();
-       
-            if (taskDto == null)
-                return NotFound("Task not found or access denied.");
+            return NotFound("Task not found or access denied.");
 
-            await cache.SetAsync(cacheKey, taskDto, TimeSpan.FromMinutes(10));
-        }
-
+        await cache.SetAsync(cacheKey, taskDto, TimeSpan.FromMinutes(10));
         return Ok(taskDto);
     }
     
     [HttpPost("create/{projId:guid}")]
-    [EndpointSummary("Creates a new task")]
-    [EndpointDescription("Returns the task's data.")]
     public async Task<IActionResult> Create(Guid projId, [FromBody] CreateTaskRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         if (tenantProvider.OrganizationId == null) return Unauthorized();
@@ -72,7 +64,6 @@ public class TasksController(AppDbContext context, ICacheService cache, IEventBu
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            // Purge downstream caches
             await cache.RemoveAsync($"project:{project.Id}");
             await cache.RemoveAsync($"org:{tenantProvider.OrganizationId}");
             
@@ -80,7 +71,7 @@ public class TasksController(AppDbContext context, ICacheService cache, IEventBu
             {
                 Task = new TaskDto(newTask.Id, newTask.Title, newTask.Description, newTask.Status, newTask.AssignedUserId),
                 ProjectId = newTask.ProjectId,
-                OrganizationId = tenantProvider.OrganizationId!.Value,
+                OrganizationId = tenantProvider.OrganizationId.Value,
                 ActivityType = "Create",
             });
 
@@ -94,8 +85,6 @@ public class TasksController(AppDbContext context, ICacheService cache, IEventBu
     }
     
     [HttpPatch("{id:guid}")]
-    [EndpointSummary("Updates a task by ID")]
-    [EndpointDescription("Returns the task's data.")]
     public async Task<IActionResult> UpdateTask(Guid id, [FromBody] UpdateTaskRequest request, [FromServices] ITenantProvider tenantProvider)
     {
         await using var transaction = await context.Database.BeginTransactionAsync();
@@ -134,7 +123,6 @@ public class TasksController(AppDbContext context, ICacheService cache, IEventBu
     }
     
     [HttpDelete("{id:guid}")]
-    [EndpointSummary("Deletes a task by ID")]
     public async Task<IActionResult> DeleteTask(Guid id, [FromServices] ITenantProvider tenantProvider)
     {
         await using var transaction = await context.Database.BeginTransactionAsync();
@@ -142,11 +130,8 @@ public class TasksController(AppDbContext context, ICacheService cache, IEventBu
         {
             var task = await context.Tasks.FirstOrDefaultAsync(t => t.Id == id);
             if (task == null) return NotFound("Task not found.");
-            var proj = await context.Projects.FirstOrDefaultAsync(p => p.Tasks.Contains(task));
-            if (proj == null) return NotFound("Project not found.");
           
             context.Tasks.Remove(task);
-            proj.Tasks.Remove(task);
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
           
